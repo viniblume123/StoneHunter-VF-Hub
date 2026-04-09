@@ -1,1 +1,2223 @@
-.
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local VirtualUser = game:GetService("VirtualUser")
+local VirtualInput = game:GetService("VirtualInputManager")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Stats = game:GetService("Stats")
+
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+local PlaceId = game.PlaceId
+
+local HUB_FOLDER = "StoneHunterVF"
+local DEFAULT_CONFIG_FILE = "StoneHunterConfig"
+local AUTOLOAD_FILE = HUB_FOLDER .. "/autoload.txt"
+
+local GITHUB_RAW_URL = "https://raw.githubusercontent.com/viniblume123/StoneHunter-VF-Hub/refs/heads/main/README.md"
+
+local function safeMakeFolder(path)
+    pcall(function()
+        if makefolder and not isfolder(path) then
+            makefolder(path)
+        end
+    end)
+end
+
+local function safeWriteFile(path, content)
+    pcall(function()
+        if writefile then
+            writefile(path, content)
+        end
+    end)
+end
+
+local function safeReadFile(path)
+    local ok, result = pcall(function()
+        if readfile and isfile and isfile(path) then
+            return readfile(path)
+        end
+    end)
+    return ok and result or nil
+end
+
+safeMakeFolder(HUB_FOLDER)
+
+local Window = Rayfield:CreateWindow({
+    Name = "Stone Hunter VF",
+    LoadingTitle = "Stone Hunter VF",
+    LoadingSubtitle = "By VF Hub",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = HUB_FOLDER,
+        FileName = DEFAULT_CONFIG_FILE
+    },
+    KeySystem = true,
+    KeySettings = {
+        Title = "Stone Hunter VF",
+        Subtitle = "Enter Key",
+        Note = "Key: 1234",
+        FileName = "StoneHunterKey",
+        SaveKey = true,
+        Key = {"1234"}
+    }
+})
+
+local Tabs = {
+    Main = Window:CreateTab("Main"),
+    Teleport = Window:CreateTab("Teleport"),
+    Player = Window:CreateTab("Player"),
+    Ragdoll = Window:CreateTab("Ragdoll"),
+    Machine = Window:CreateTab("Machine"),
+    Base = Window:CreateTab("Base"),
+    Settings = Window:CreateTab("Settings")
+}
+
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+local RootPart = Character:WaitForChild("HumanoidRootPart")
+
+local TeleportSpots = {nil, nil, nil}
+local FlyEnabled = false
+local NoHoldEnabled = false
+local HighlightEnabled = true
+local InfiniteJumpEnabled = false
+local TpToMouseEnabled = false
+local AutoClickActive = false
+
+local GravityValue = 196.2
+local JumpPowerValue = 50
+local WalkSpeedValue = 16
+
+local SelectedPlayer = nil
+local FollowMode = false
+local FollowConnection = nil
+local ExcludedPlayers = {}
+local ZonePlayers = {}
+
+local RagdollZoneActive = false
+local RagdollZoneRadius = 30
+local ZoneCircle = nil
+local ZoneRing = nil
+local ZonePositionConnection = nil
+local ZoneProcessThread = nil
+local RagdollRodando = false
+local RagdollTarefa = nil
+local RagdollFila = {}
+local RagdollProcessando = false
+local RagdollUltimoProcessamento = 0
+local RagdollDelayEntreExecucoes = 0.3
+local RagdollTentativasPorJogador = {}
+
+local AutoCollectMoneyActive = false
+local AutoCollectLoopEnabled = false
+local AutoCollectSecondsDelay = 0
+local AutoCollectMinutesDelay = 0
+local AutoCollectMoneyThread = nil
+local CollectedItems = {}
+
+local AutoRebirthActive = false
+local AutoUpgradeActive = false
+local AutoRevealActive = false
+local AutoStartFuseActive = false
+local AutoRandomTraitActive = false
+local AutoPlaceCycleActive = false
+local AutoPlaceCycleThread = nil
+local AutoPlaceItemsPlaced = 0
+
+local AutoRebirthThread = nil
+local AutoUpgradeThread = nil
+local AutoRevealThread = nil
+local AutoStartFuseThread = nil
+local AutoRandomTraitThread = nil
+
+local FlyConnection = nil
+local BodyVelocity = nil
+local BodyGyro = nil
+local MoveKeys = {W = false, A = false, S = false, D = false, Space = false, LeftShift = false}
+
+local Keybinds = {
+    Fly = Enum.KeyCode.N,
+    Ragdoll = Enum.KeyCode.R,
+    TpToStone = Enum.KeyCode.T,
+    TpSaved1 = Enum.KeyCode.Z,
+    TpSaved2 = Enum.KeyCode.X,
+    TpSaved3 = Enum.KeyCode.C,
+    ServerHop = Enum.KeyCode.H,
+    InfiniteJump = Enum.KeyCode.J,
+    AutoClick = Enum.KeyCode.F
+}
+
+local ServerHopConfig = {
+    IgnoreCurrentServer = true,
+    IgnoreFullServers = true,
+    IgnoreVisitedServers = true,
+    SortMode = "LowestPlayers",
+    RetryTeleportFail = true,
+    MaxTeleportAttempts = 5,
+    AutoHopEnabled = false,
+    HopOnlyIfNoStone = true,
+    TargetStone = "DivineStone",
+    HopDelay = 2,
+    MaxPages = 3
+}
+
+local VisitedServers = {}
+local ServerHopBusy = false
+local AutoHopThread = nil
+
+local PromptOriginalDurations = setmetatable({}, {__mode = "k"})
+local TpToMouseConnection = nil
+local AutoClickThread = nil
+
+local AutoEquipGui = nil
+local AutoEquipList = nil
+local AutoEquipSelectedItems = {}
+
+local InternalToggleUpdate = false
+local Toggles = {}
+local currentConfigName = DEFAULT_CONFIG_FILE
+local autoLoadConfigName = safeReadFile(AUTOLOAD_FILE) or DEFAULT_CONFIG_FILE
+
+local StonePriority = {"DivineStone", "CelestialStone"}
+local StoneHighlights = {}
+local StoneBillboards = {}
+local CurrentStoneContainer = nil
+local CurrentStonePart = nil
+
+local MarkedPlayers = {}
+local MarkedPlayersDropdown = nil
+
+local function SafeSetToggle(toggle, state)
+    if toggle and toggle.Set then
+        InternalToggleUpdate = true
+        pcall(function() toggle:Set(state) end)
+        InternalToggleUpdate = false
+    end
+end
+
+local function notify(title, content, duration)
+    if title == "Stone" or title == "Auto Setup" or title == "Config" or title == "Auto Hop" then
+        Rayfield:Notify({
+            Title = title,
+            Content = content,
+            Duration = duration or 2
+        })
+    end
+end
+
+local function IsStillValidStone(container, part)
+    if not container or not part then return false end
+    if not container.Parent or not part.Parent then return false end
+    if not part:IsA("BasePart") then return false end
+    return container.Name == "DivineStone" or container.Name == "CelestialStone"
+end
+
+local function StopFly()
+    if FlyConnection then FlyConnection:Disconnect() FlyConnection = nil end
+    if BodyVelocity then BodyVelocity:Destroy() BodyVelocity = nil end
+    if BodyGyro then BodyGyro:Destroy() BodyGyro = nil end
+    if Humanoid and Humanoid.Parent then Humanoid.PlatformStand = false end
+end
+
+local function StartFly()
+    if not Character or not RootPart or not Humanoid then return end
+    StopFly()
+    BodyVelocity = Instance.new("BodyVelocity")
+    BodyVelocity.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+    BodyVelocity.Velocity = Vector3.zero
+    BodyVelocity.Parent = RootPart
+    BodyGyro = Instance.new("BodyGyro")
+    BodyGyro.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
+    BodyGyro.P = 100000
+    BodyGyro.CFrame = Workspace.CurrentCamera.CFrame
+    BodyGyro.Parent = RootPart
+    FlyConnection = RunService.RenderStepped:Connect(function()
+        if not FlyEnabled or not RootPart then return end
+        local cam = Workspace.CurrentCamera
+        local direction = Vector3.zero
+        local speed = 70
+        if MoveKeys.W then direction = direction + cam.CFrame.LookVector end
+        if MoveKeys.S then direction = direction - cam.CFrame.LookVector end
+        if MoveKeys.A then direction = direction - cam.CFrame.RightVector end
+        if MoveKeys.D then direction = direction + cam.CFrame.RightVector end
+        if MoveKeys.Space then direction = direction + Vector3.new(0, 1, 0) end
+        if MoveKeys.LeftShift then direction = direction - Vector3.new(0, 1, 0) end
+        if direction.Magnitude > 0 then direction = direction.Unit * speed end
+        BodyVelocity.Velocity = direction
+        BodyGyro.CFrame = cam.CFrame
+    end)
+end
+
+local function SetFly(state)
+    if FlyEnabled == state then return end
+    FlyEnabled = state
+    if state then StartFly() else StopFly() end
+    SafeSetToggle(Toggles.Fly, state)
+end
+
+local function SetNoHold(state)
+    if NoHoldEnabled == state then return end
+    NoHoldEnabled = state
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        if obj:IsA("ProximityPrompt") then
+            if state then
+                if PromptOriginalDurations[obj] == nil then
+                    PromptOriginalDurations[obj] = obj.HoldDuration
+                end
+                obj.HoldDuration = 0
+            else
+                if PromptOriginalDurations[obj] ~= nil then
+                    obj.HoldDuration = PromptOriginalDurations[obj]
+                end
+            end
+        end
+    end
+    SafeSetToggle(Toggles.NoHold, state)
+end
+
+local function FindPartInside(instance)
+    if not instance or not instance.Parent then return nil end
+    if instance:IsA("BasePart") then return instance end
+    for _, descendant in ipairs(instance:GetDescendants()) do
+        if descendant:IsA("BasePart") then return descendant end
+    end
+    return nil
+end
+
+local function FindStoneByName(stoneName)
+    local stones = {}
+    for _, descendant in ipairs(Workspace:GetDescendants()) do
+        if descendant.Name == stoneName and (descendant:IsA("Model") or descendant:IsA("Folder") or descendant:IsA("BasePart")) then
+            local part = FindPartInside(descendant)
+            if part then
+                table.insert(stones, {container = descendant, part = part})
+            end
+        end
+    end
+    return stones
+end
+
+local function CreateStoneHighlight(stone, part, stoneName)
+    if not HighlightEnabled then return end
+    local highlight = Instance.new("Highlight")
+    highlight.Adornee = stone
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    if stoneName == "DivineStone" then
+        highlight.FillColor = Color3.fromRGB(255, 215, 0)
+        highlight.OutlineColor = Color3.fromRGB(255, 180, 0)
+    else
+        highlight.FillColor = Color3.fromRGB(0, 180, 255)
+        highlight.OutlineColor = Color3.fromRGB(0, 130, 200)
+    end
+    highlight.FillTransparency = 0.4
+    highlight.OutlineTransparency = 0.2
+    highlight.Parent = stone
+    table.insert(StoneHighlights, highlight)
+
+    local billboard = Instance.new("BillboardGui")
+    billboard.Adornee = part
+    billboard.Size = UDim2.new(0, 120, 0, 35)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+    billboard.Parent = part
+
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Size = UDim2.new(1, 0, 1, 0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.Text = stoneName
+    textLabel.TextSize = 14
+    textLabel.Font = Enum.Font.GothamBold
+    textLabel.TextStrokeTransparency = 0.2
+    textLabel.TextColor3 = stoneName == "DivineStone" and Color3.fromRGB(255, 215, 0) or Color3.fromRGB(0, 180, 255)
+    textLabel.Parent = billboard
+    table.insert(StoneBillboards, billboard)
+end
+
+local function UpdateStoneHighlights()
+    for _, highlight in pairs(StoneHighlights) do
+        pcall(function() highlight:Destroy() end)
+    end
+    for _, billboard in pairs(StoneBillboards) do
+        pcall(function() billboard:Destroy() end)
+    end
+    StoneHighlights = {}
+    StoneBillboards = {}
+    if not HighlightEnabled then return end
+    for _, stoneName in ipairs(StonePriority) do
+        local stones = FindStoneByName(stoneName)
+        for _, stoneInfo in ipairs(stones) do
+            CreateStoneHighlight(stoneInfo.container, stoneInfo.part, stoneName)
+        end
+    end
+end
+
+local function SetHighlight(state)
+    if HighlightEnabled == state then return end
+    HighlightEnabled = state
+    UpdateStoneHighlights()
+    SafeSetToggle(Toggles.Highlight, state)
+end
+
+local function SetGravity(value)
+    GravityValue = value
+    Workspace.Gravity = GravityValue
+end
+
+local function SetJumpPower(value)
+    JumpPowerValue = value
+    if Humanoid then
+        Humanoid.JumpPower = JumpPowerValue
+        if not Humanoid.UseJumpPower then
+            Humanoid.UseJumpPower = true
+        end
+    end
+end
+
+local function SetWalkSpeed(value)
+    WalkSpeedValue = value
+    if Humanoid then Humanoid.WalkSpeed = WalkSpeedValue end
+end
+
+local function SetInfiniteJump(state)
+    if InfiniteJumpEnabled == state then return end
+    InfiniteJumpEnabled = state
+    SafeSetToggle(Toggles.InfiniteJump, state)
+end
+
+local function SetTpToMouse(state)
+    if TpToMouseEnabled == state then return end
+    TpToMouseEnabled = state
+    SafeSetToggle(Toggles.TpToMouse, state)
+end
+
+if TpToMouseConnection then TpToMouseConnection:Disconnect() end
+TpToMouseConnection = Mouse.Button1Down:Connect(function()
+    if TpToMouseEnabled and Mouse and Mouse.Hit and RootPart then
+        local targetPos = Mouse.Hit.Position
+        local currentPos = RootPart.Position
+        local distance = (currentPos - targetPos).Magnitude
+        if distance > 300 then
+            local direction = (targetPos - currentPos).Unit
+            targetPos = currentPos + direction * 300
+        end
+        if targetPos.Y > 500 then targetPos = Vector3.new(targetPos.X, 500, targetPos.Z) end
+        if targetPos.Y < 0 then targetPos = Vector3.new(targetPos.X, 5, targetPos.Z) end
+        RootPart.CFrame = CFrame.new(targetPos) + Vector3.new(0, 3, 0)
+    end
+end)
+
+local function StopAutoClick()
+    AutoClickActive = false
+    if AutoClickThread then
+        task.cancel(AutoClickThread)
+        AutoClickThread = nil
+    end
+end
+
+local function StartAutoClick()
+    if AutoClickActive then return end
+    AutoClickActive = true
+    AutoClickThread = task.spawn(function()
+        while AutoClickActive do
+            VirtualInput:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+            VirtualInput:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+            task.wait(0.05)
+        end
+    end)
+end
+
+local function SetAutoClick(state)
+    if AutoClickActive == state then return end
+    if state then StartAutoClick() else StopAutoClick() end
+    SafeSetToggle(Toggles.AutoClick, state)
+end
+
+local function TeleportToPosition(cf)
+    if RootPart and cf then RootPart.CFrame = cf end
+end
+
+local function TeleportToStonePart(part)
+    if part and part.Parent and part:IsA("BasePart") and RootPart then
+        RootPart.CFrame = part.CFrame + Vector3.new(0, 4, 0)
+    end
+end
+
+local function FindBestStone()
+    local divineStones = FindStoneByName("DivineStone")
+    if #divineStones > 0 then
+        return divineStones[1].container, divineStones[1].part, "DivineStone"
+    end
+    local celestialStones = FindStoneByName("CelestialStone")
+    if #celestialStones > 0 then
+        return celestialStones[1].container, celestialStones[1].part, "CelestialStone"
+    end
+    return nil, nil, nil
+end
+
+local function TpToBestStone()
+    local container, part, stoneName = FindBestStone()
+    if container and part then
+        TeleportToStonePart(part)
+        return true
+    end
+    return false
+end
+
+local function FindRagdollRemote(char)
+    if not char then return nil end
+    local ragdoll = char:FindFirstChild("ragdoll")
+    if ragdoll then
+        local functions = ragdoll:FindFirstChild("functions")
+        if functions then
+            local r = functions:FindFirstChild("remoteragdoll")
+            if r then return r end
+        end
+    end
+    local function Search(obj)
+        for _, c in pairs(obj:GetChildren()) do
+            if c.Name == "remoteragdoll" and (c:IsA("RemoteFunction") or c:IsA("RemoteEvent")) then
+                return c
+            end
+            if c:IsA("Folder") or c:IsA("Model") then
+                local found = Search(c)
+                if found then return found end
+            end
+        end
+        return nil
+    end
+    return Search(char)
+end
+
+local function ExecuteRagdoll(player)
+    if not player then return false end
+    if ExcludedPlayers[player.Name] then return false end
+    if player == LocalPlayer then return false end
+    if MarkedPlayers[player.Name] == false then return false end
+
+    local char = player.Character
+    if not char then return false end
+
+    local remote = FindRagdollRemote(char)
+    if not remote then return false end
+
+    return pcall(function()
+        if remote:IsA("RemoteFunction") then
+            remote:InvokeServer()
+        else
+            remote:FireServer()
+        end
+    end)
+end
+
+local function AtualizarFilaRagdoll()
+    for i = #RagdollFila, 1, -1 do
+        local p = RagdollFila[i]
+        if not p or not p.Parent or ExcludedPlayers[p.Name] or p == LocalPlayer or MarkedPlayers[p.Name] == false then
+            table.remove(RagdollFila, i)
+        end
+    end
+
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and not ExcludedPlayers[p.Name] and MarkedPlayers[p.Name] ~= false then
+            local jaNaFila = false
+            for _, f in pairs(RagdollFila) do
+                if f == p then jaNaFila = true break end
+            end
+            if not jaNaFila then
+                table.insert(RagdollFila, p)
+                RagdollTentativasPorJogador[p.Name] = 0
+            end
+        end
+    end
+end
+
+local function AdicionarPrioridadeRagdoll(player)
+    if player == LocalPlayer then return end
+    if ExcludedPlayers[player.Name] then return end
+    if MarkedPlayers[player.Name] == false then return end
+    if not RagdollRodando then return end
+
+    for i = #RagdollFila, 1, -1 do
+        if RagdollFila[i] == player then
+            table.remove(RagdollFila, i)
+            break
+        end
+    end
+    table.insert(RagdollFila, 1, player)
+    RagdollTentativasPorJogador[player.Name] = 0
+end
+
+local function ProcessarProximoRagdoll()
+    if RagdollProcessando then return end
+    local agora = tick()
+    if agora - RagdollUltimoProcessamento < RagdollDelayEntreExecucoes then return end
+
+    RagdollProcessando = true
+    AtualizarFilaRagdoll()
+
+    if #RagdollFila == 0 then
+        RagdollProcessando = false
+        return
+    end
+
+    local alvo = table.remove(RagdollFila, 1)
+    if not alvo then
+        RagdollProcessando = false
+        return
+    end
+
+    local tentativas = RagdollTentativasPorJogador[alvo.Name] or 0
+    local success = ExecuteRagdoll(alvo)
+
+    if not success then
+        tentativas = tentativas + 1
+        RagdollTentativasPorJogador[alvo.Name] = tentativas
+        if tentativas < 3 then
+            table.insert(RagdollFila, alvo)
+        end
+    else
+        RagdollTentativasPorJogador[alvo.Name] = 0
+    end
+
+    RagdollUltimoProcessamento = tick()
+    RagdollProcessando = false
+end
+
+local function IniciarRagdoll()
+    if RagdollRodando then return end
+    RagdollRodando = true
+    RagdollFila = {}
+    RagdollTentativasPorJogador = {}
+    AtualizarFilaRagdoll()
+    RagdollUltimoProcessamento = 0
+
+    if RagdollZoneActive then SetRagdollZoneState(false) end
+
+    RagdollTarefa = task.spawn(function()
+        while RagdollRodando do
+            ProcessarProximoRagdoll()
+            task.wait(RagdollDelayEntreExecucoes)
+        end
+    end)
+
+    SafeSetToggle(Toggles.Ragdoll, true)
+end
+
+local function PararRagdoll()
+    RagdollRodando = false
+    if RagdollTarefa then task.cancel(RagdollTarefa) RagdollTarefa = nil end
+    SafeSetToggle(Toggles.Ragdoll, false)
+end
+
+local function ToggleRagdoll()
+    if RagdollRodando then PararRagdoll() else IniciarRagdoll() end
+end
+
+local function CreateZoneCircle()
+    if ZoneCircle then ZoneCircle:Destroy() ZoneCircle = nil end
+    if ZoneRing then ZoneRing:Destroy() ZoneRing = nil end
+    if ZonePositionConnection then ZonePositionConnection:Disconnect() ZonePositionConnection = nil end
+
+    if not RootPart then return end
+
+    ZoneCircle = Instance.new("Part")
+    ZoneCircle.Name = "RagdollZoneFill"
+    ZoneCircle.Shape = Enum.PartType.Cylinder
+    ZoneCircle.Size = Vector3.new(RagdollZoneRadius * 2, 0.2, RagdollZoneRadius * 2)
+    ZoneCircle.Anchored = true
+    ZoneCircle.CanCollide = false
+    ZoneCircle.Material = Enum.Material.Neon
+    ZoneCircle.Color = Color3.fromRGB(255, 0, 0)
+    ZoneCircle.Transparency = 0.7
+    ZoneCircle.Orientation = Vector3.new(0, 0, 90)
+    ZoneCircle.Parent = Workspace
+
+    ZoneRing = Instance.new("Part")
+    ZoneRing.Name = "RagdollZoneRing"
+    ZoneRing.Shape = Enum.PartType.Cylinder
+    ZoneRing.Size = Vector3.new(RagdollZoneRadius * 2 + 0.5, 0.3, RagdollZoneRadius * 2 + 0.5)
+    ZoneRing.Anchored = true
+    ZoneRing.CanCollide = false
+    ZoneRing.Material = Enum.Material.Neon
+    ZoneRing.Color = Color3.fromRGB(255, 50, 50)
+    ZoneRing.Transparency = 0.5
+    ZoneRing.Orientation = Vector3.new(0, 0, 90)
+    ZoneRing.Parent = Workspace
+
+    ZonePositionConnection = RunService.Heartbeat:Connect(function()
+        if not RagdollZoneActive or not RootPart or not ZoneCircle or not ZoneRing then return end
+        local pos = RootPart.Position - Vector3.new(0, 3, 0)
+        ZoneCircle.Position = pos
+        ZoneRing.Position = pos
+    end)
+end
+
+local function ProcessZoneRagdoll()
+    if not RagdollZoneActive or not RootPart then return end
+
+    local rootPos = RootPart.Position
+    local flatRoot = Vector3.new(rootPos.X, 0, rootPos.Z)
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and not ExcludedPlayers[player.Name] and MarkedPlayers[player.Name] ~= false then
+            local char = player.Character
+            local targetRoot = char and char:FindFirstChild("HumanoidRootPart")
+            if targetRoot then
+                local flatTarget = Vector3.new(targetRoot.Position.X, 0, targetRoot.Position.Z)
+                local distance = (flatRoot - flatTarget).Magnitude
+                if distance <= RagdollZoneRadius then
+                    if not ZonePlayers[player] then
+                        ZonePlayers[player] = true
+                        ExecuteRagdoll(player)
+                    end
+                else
+                    ZonePlayers[player] = nil
+                end
+            end
+        end
+    end
+end
+
+local function SetRagdollZoneState(state)
+    if state and RagdollRodando then
+        SafeSetToggle(Toggles.RagdollZone, false)
+        return
+    end
+
+    if RagdollZoneActive == state then return end
+    RagdollZoneActive = state
+
+    if state then
+        CreateZoneCircle()
+        if ZoneProcessThread then task.cancel(ZoneProcessThread) end
+        ZoneProcessThread = task.spawn(function()
+            while RagdollZoneActive do
+                ProcessZoneRagdoll()
+                task.wait(0.15)
+            end
+        end)
+    else
+        if ZoneCircle then ZoneCircle:Destroy() ZoneCircle = nil end
+        if ZoneRing then ZoneRing:Destroy() ZoneRing = nil end
+        if ZonePositionConnection then ZonePositionConnection:Disconnect() ZonePositionConnection = nil end
+        if ZoneProcessThread then task.cancel(ZoneProcessThread) ZoneProcessThread = nil end
+        ZonePlayers = {}
+    end
+    SafeSetToggle(Toggles.RagdollZone, state)
+end
+
+local function SetRagdollZoneRadius(value)
+    RagdollZoneRadius = value
+    if RagdollZoneActive then CreateZoneCircle() end
+end
+
+local function ConfigurarEventosRagdoll()
+    local function OnPlayerDeathOrRespawn(player)
+        if player == LocalPlayer then return end
+        if ExcludedPlayers[player.Name] then return end
+        if MarkedPlayers[player.Name] == false then return end
+        if RagdollRodando then AdicionarPrioridadeRagdoll(player) end
+    end
+
+    local function ConfigurarPlayer(player)
+        if player == LocalPlayer then return end
+
+        player.CharacterAdded:Connect(function()
+            task.wait(0.5)
+            OnPlayerDeathOrRespawn(player)
+        end)
+
+        local function verificarMorte()
+            if player.Character then
+                local char = player.Character
+                char.AncestryChanged:Connect(function()
+                    if not char.Parent then OnPlayerDeathOrRespawn(player) end
+                end)
+            end
+        end
+
+        verificarMorte()
+        player.CharacterAdded:Connect(verificarMorte)
+    end
+
+    for _, p in pairs(Players:GetPlayers()) do
+        ConfigurarPlayer(p)
+        if ExcludedPlayers[p.Name] == nil then ExcludedPlayers[p.Name] = false end
+        if MarkedPlayers[p.Name] == nil then MarkedPlayers[p.Name] = true end
+    end
+
+    Players.PlayerAdded:Connect(function(p)
+        ConfigurarPlayer(p)
+        if ExcludedPlayers[p.Name] == nil then ExcludedPlayers[p.Name] = false end
+        if MarkedPlayers[p.Name] == nil then MarkedPlayers[p.Name] = true end
+        if RagdollRodando then AtualizarFilaRagdoll() end
+        UpdateMarkedPlayersDropdown()
+    end)
+
+    Players.PlayerRemoving:Connect(function(p)
+        for i = #RagdollFila, 1, -1 do
+            if RagdollFila[i] == p then table.remove(RagdollFila, i) end
+        end
+        RagdollTentativasPorJogador[p.Name] = nil
+        UpdateMarkedPlayersDropdown()
+    end)
+end
+
+local function UpdateMarkedPlayersDropdown()
+    if not MarkedPlayersDropdown then return end
+    local options = {}
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            local isMarked = MarkedPlayers[p.Name] ~= false
+            table.insert(options, p.Name .. (isMarked and " ✓" or " ✗"))
+        end
+    end
+    MarkedPlayersDropdown:Refresh(options)
+end
+
+ConfigurarEventosRagdoll()
+
+local function StopFollowing()
+    FollowMode = false
+    if FollowConnection then FollowConnection:Disconnect() FollowConnection = nil end
+end
+
+local function StartFollowing(player)
+    if not player or player == LocalPlayer then return end
+    local targetChar = player.Character
+    local targetRoot = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
+    if not targetRoot or not RootPart then return end
+
+    SelectedPlayer = player
+    FollowMode = true
+
+    if FollowConnection then FollowConnection:Disconnect() end
+
+    FollowConnection = RunService.RenderStepped:Connect(function()
+        if not FollowMode or not SelectedPlayer or not RootPart then return end
+        local char = SelectedPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        if not root then
+            StopFollowing()
+            return
+        end
+        RootPart.CFrame = root.CFrame + Vector3.new(0, 3, 0)
+    end)
+end
+
+local function ToggleFollow()
+    if FollowMode then
+        StopFollowing()
+    elseif SelectedPlayer then
+        StartFollowing(SelectedPlayer)
+    end
+end
+
+local function StartPlayerSelectionMode()
+    local selectionConnection = Mouse.Button1Down:Connect(function()
+        local target = Mouse.Target
+        if not target then return end
+        local model = target:FindFirstAncestorOfClass("Model")
+        if not model then return end
+        local player = Players:GetPlayerFromCharacter(model)
+        if not player or player == LocalPlayer then return end
+        SelectedPlayer = player
+        selectionConnection:Disconnect()
+    end)
+    
+    task.delay(5, function() selectionConnection:Disconnect() end)
+end
+
+local function CheckTargetStoneInCurrentServer()
+    if ServerHopConfig.TargetStone == "DivineStone" then
+        return #FindStoneByName("DivineStone") > 0
+    elseif ServerHopConfig.TargetStone == "CelestialStone" then
+        return #FindStoneByName("CelestialStone") > 0
+    end
+    return false
+end
+
+local function IsServerValid(server)
+    if ServerHopConfig.IgnoreCurrentServer and server.id == game.JobId then return false end
+    if ServerHopConfig.IgnoreFullServers and server.playing >= server.maxPlayers then return false end
+    if ServerHopConfig.IgnoreVisitedServers and VisitedServers[server.id] then return false end
+    return true
+end
+
+local function SortServers(servers)
+    if ServerHopConfig.SortMode == "LowestPlayers" then
+        table.sort(servers, function(a, b) return a.playing < b.playing end)
+    elseif ServerHopConfig.SortMode == "HighestPlayers" then
+        table.sort(servers, function(a, b) return a.playing > b.playing end)
+    end
+end
+
+local function GetValidServers()
+    local allServers = {}
+    local cursor = nil
+    
+    for page = 1, ServerHopConfig.MaxPages do
+        local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Desc&limit=100"
+        if cursor then url = url .. "&cursor=" .. cursor end
+        
+        local success, result = pcall(function()
+            return HttpService:JSONDecode(game:HttpGet(url))
+        end)
+        
+        if success and result and result.data then
+            for _, server in ipairs(result.data) do
+                if IsServerValid(server) then
+                    table.insert(allServers, server)
+                end
+            end
+            cursor = result.nextPageCursor
+            if not cursor then break end
+        else
+            break
+        end
+        task.wait(0.35)
+    end
+    
+    SortServers(allServers)
+    return allServers
+end
+
+local function HopToNextServer()
+    if ServerHopBusy then return false end
+    ServerHopBusy = true
+    
+    local servers = GetValidServers()
+    local attempts = 0
+    local successHop = false
+    
+    for _, server in ipairs(servers) do
+        if attempts >= ServerHopConfig.MaxTeleportAttempts and not ServerHopConfig.RetryTeleportFail then
+            break
+        end
+        
+        attempts = attempts + 1
+        VisitedServers[server.id] = true
+        
+        local ok = pcall(function()
+            TeleportService:TeleportToPlaceInstance(PlaceId, server.id, LocalPlayer)
+        end)
+        
+        if ok then
+            successHop = true
+            break
+        end
+    end
+    
+    ServerHopBusy = false
+    return successHop
+end
+
+local function SingleServerHop()
+    if ServerHopBusy then return end
+    HopToNextServer()
+end
+
+local function StartAutoHop()
+    if AutoHopThread then task.cancel(AutoHopThread) end
+    
+    ServerHopConfig.AutoHopEnabled = true
+    
+    AutoHopThread = task.spawn(function()
+        while ServerHopConfig.AutoHopEnabled do
+            if ServerHopConfig.HopOnlyIfNoStone then
+                if CheckTargetStoneInCurrentServer() then
+                    notify("Auto Hop", "Target stone found! Stopped.", 3)
+                    ServerHopConfig.AutoHopEnabled = false
+                    SafeSetToggle(Toggles.AutoHop, false)
+                    break
+                end
+            end
+            
+            local ok = HopToNextServer()
+            if not ok then
+                task.wait(2)
+            end
+            
+            task.wait(ServerHopConfig.HopDelay)
+        end
+    end)
+    
+    notify("Auto Hop", "Started - Target: " .. ServerHopConfig.TargetStone, 3)
+end
+
+local function StopAutoHop()
+    ServerHopConfig.AutoHopEnabled = false
+    if AutoHopThread then task.cancel(AutoHopThread) AutoHopThread = nil end
+end
+
+local function SetAutoHop(state)
+    if ServerHopConfig.AutoHopEnabled == state then return end
+    if state then StartAutoHop() else StopAutoHop() end
+end
+
+local function RejoinCurrentServer()
+    local currentPlaceId = game.PlaceId
+    local currentJobId = game.JobId
+    
+    if type(currentPlaceId) ~= "number" or type(currentJobId) ~= "string" or currentJobId == "" then
+        return
+    end
+    
+    pcall(function()
+        TeleportService:TeleportToPlaceInstance(currentPlaceId, currentJobId, LocalPlayer)
+    end)
+end
+
+local function GetAllCollectTouch()
+    local items = {}
+    local map = Workspace:FindFirstChild("Map")
+    if not map then return items end
+
+    for _, obj in ipairs(map:GetDescendants()) do
+        if obj.Name == "CollectTouch" and obj:IsA("BasePart") and not CollectedItems[obj] then
+            table.insert(items, obj)
+        end
+    end
+    return items
+end
+
+local function GetAutoCollectDelay()
+    return (AutoCollectMinutesDelay * 60) + AutoCollectSecondsDelay
+end
+
+local function StopAutoCollectMoney()
+    AutoCollectMoneyActive = false
+    if AutoCollectMoneyThread then
+        task.cancel(AutoCollectMoneyThread)
+        AutoCollectMoneyThread = nil
+    end
+    SafeSetToggle(Toggles.AutoCollect, false)
+end
+
+local function AutoCollectOnce()
+    local items = GetAllCollectTouch()
+    if #items == 0 then return false end
+
+    local originalPositions = {}
+    local originalTransparency = {}
+    local originalCanCollide = {}
+
+    for _, item in ipairs(items) do
+        originalPositions[item] = item.CFrame
+        originalTransparency[item] = item.Transparency
+        originalCanCollide[item] = item.CanCollide
+    end
+
+    for _, item in ipairs(items) do
+        if item and item.Parent and RootPart then
+            item.CFrame = RootPart.CFrame - Vector3.new(0, 3, 0)
+        end
+    end
+
+    task.wait(0.5)
+
+    for _, item in ipairs(items) do
+        if item and item.Parent then
+            item.CFrame = originalPositions[item]
+            item.Transparency = originalTransparency[item]
+            item.CanCollide = originalCanCollide[item]
+            CollectedItems[item] = true
+        end
+    end
+
+    return true
+end
+
+local function StartAutoCollectMoney()
+    if AutoCollectMoneyActive then return end
+    AutoCollectMoneyActive = true
+
+    AutoCollectMoneyThread = task.spawn(function()
+        while AutoCollectMoneyActive do
+            local collected = AutoCollectOnce()
+            if not collected then
+                StopAutoCollectMoney()
+                break
+            end
+            if not AutoCollectLoopEnabled then
+                StopAutoCollectMoney()
+                break
+            end
+            local delayTime = GetAutoCollectDelay()
+            task.wait(delayTime > 0 and delayTime or 1)
+        end
+    end)
+end
+
+local function SetAutoCollectMoney(state)
+    if AutoCollectMoneyActive == state then return end
+    if state then StartAutoCollectMoney() else StopAutoCollectMoney() end
+end
+
+local function PlaceBrainrot()
+    local remote = ReplicatedStorage:FindFirstChild("Remotes")
+    if remote then remote = remote:FindFirstChild("TraitMachine") end
+    if remote then remote = remote:FindFirstChild("PlaceItem") end
+    if remote and remote:IsA("RemoteFunction") then
+        remote:InvokeServer()
+    end
+end
+
+local function RandomTrait()
+    local remote = ReplicatedStorage:FindFirstChild("Remotes")
+    if remote then remote = remote:FindFirstChild("TraitMachine") end
+    if remote then remote = remote:FindFirstChild("RollTrait") end
+    if remote and remote:IsA("RemoteEvent") then
+        remote:FireServer()
+    end
+end
+
+local function SetAutoRandomTrait(state)
+    if AutoRandomTraitActive == state then return end
+    AutoRandomTraitActive = state
+    if state then
+        if AutoRandomTraitThread then task.cancel(AutoRandomTraitThread) end
+        AutoRandomTraitThread = task.spawn(function()
+            while AutoRandomTraitActive do
+                RandomTrait()
+                task.wait(1)
+            end
+        end)
+    else
+        if AutoRandomTraitThread then
+            task.cancel(AutoRandomTraitThread)
+            AutoRandomTraitThread = nil
+        end
+    end
+    SafeSetToggle(Toggles.AutoRandomTrait, state)
+end
+
+local function PickupBrainrot()
+    local remote = ReplicatedStorage:FindFirstChild("Remotes")
+    if remote then remote = remote:FindFirstChild("TraitMachine") end
+    if remote then remote = remote:FindFirstChild("PickupItem") end
+    if remote and remote:IsA("RemoteFunction") then
+        remote:InvokeServer()
+    end
+end
+
+local function RevealFuse()
+    local remote = ReplicatedStorage:FindFirstChild("Remotes")
+    if remote then remote = remote:FindFirstChild("FuseMachine") end
+    if remote then remote = remote:FindFirstChild("Reveal") end
+    if remote and remote:IsA("RemoteEvent") then
+        remote:FireServer()
+    end
+end
+
+local function SetAutoRevealFuse(state)
+    if AutoRevealActive == state then return end
+    AutoRevealActive = state
+    if state then
+        if AutoRevealThread then task.cancel(AutoRevealThread) end
+        AutoRevealThread = task.spawn(function()
+            while AutoRevealActive do
+                RevealFuse()
+                task.wait(0.5)
+            end
+        end)
+    else
+        if AutoRevealThread then
+            task.cancel(AutoRevealThread)
+            AutoRevealThread = nil
+        end
+    end
+    SafeSetToggle(Toggles.AutoReveal, state)
+end
+
+local function StartFuse()
+    local remote = ReplicatedStorage:FindFirstChild("Remotes")
+    if remote then remote = remote:FindFirstChild("FuseMachine") end
+    if remote then remote = remote:FindFirstChild("StartFuse") end
+    if remote and remote:IsA("RemoteEvent") then
+        remote:FireServer()
+    end
+end
+
+local function SetAutoStartFuse(state)
+    if AutoStartFuseActive == state then return end
+    AutoStartFuseActive = state
+    if state then
+        if AutoStartFuseThread then task.cancel(AutoStartFuseThread) end
+        AutoStartFuseThread = task.spawn(function()
+            while AutoStartFuseActive do
+                StartFuse()
+                task.wait(0.5)
+            end
+        end)
+    else
+        if AutoStartFuseThread then
+            task.cancel(AutoStartFuseThread)
+            AutoStartFuseThread = nil
+        end
+    end
+    SafeSetToggle(Toggles.AutoStartFuse, state)
+end
+
+local function Rebirth()
+    local remote = ReplicatedStorage:FindFirstChild("Remotes")
+    if remote then remote = remote:FindFirstChild("Rebirth") end
+    if remote and remote:IsA("RemoteEvent") then
+        remote:FireServer()
+    end
+end
+
+local function SetAutoRebirth(state)
+    if AutoRebirthActive == state then return end
+    AutoRebirthActive = state
+    if state then
+        if AutoRebirthThread then task.cancel(AutoRebirthThread) end
+        AutoRebirthThread = task.spawn(function()
+            while AutoRebirthActive do
+                Rebirth()
+                task.wait(5)
+            end
+        end)
+    else
+        if AutoRebirthThread then
+            task.cancel(AutoRebirthThread)
+            AutoRebirthThread = nil
+        end
+    end
+    SafeSetToggle(Toggles.AutoRebirth, state)
+end
+
+local function UpgradePlot()
+    local remote = ReplicatedStorage:FindFirstChild("Remotes")
+    if remote then remote = remote:FindFirstChild("UpgradePlot") end
+    if remote and remote:IsA("RemoteEvent") then
+        remote:FireServer()
+    end
+end
+
+local function SetAutoUpgradePlot(state)
+    if AutoUpgradeActive == state then return end
+    AutoUpgradeActive = state
+    if state then
+        if AutoUpgradeThread then task.cancel(AutoUpgradeThread) end
+        AutoUpgradeThread = task.spawn(function()
+            while AutoUpgradeActive do
+                UpgradePlot()
+                task.wait(2)
+            end
+        end)
+    else
+        if AutoUpgradeThread then
+            task.cancel(AutoUpgradeThread)
+            AutoUpgradeThread = nil
+        end
+    end
+    SafeSetToggle(Toggles.AutoUpgrade, state)
+end
+
+local function GetBackpackItems()
+    local items = {}
+    local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+    if not backpack then return items end
+
+    for _, item in ipairs(backpack:GetChildren()) do
+        if item:IsA("Tool") then
+            table.insert(items, item)
+        end
+    end
+    return items
+end
+
+local function RefreshAutoEquipList()
+    if not AutoEquipList then return end
+
+    for _, child in pairs(AutoEquipList:GetChildren()) do
+        if child:IsA("TextButton") then child:Destroy() end
+    end
+
+    local y = 0
+    for _, item in ipairs(GetBackpackItems()) do
+        local key = item:GetDebugId()
+        local selected = AutoEquipSelectedItems[key] == true
+
+        local button = Instance.new("TextButton")
+        button.Size = UDim2.new(1, -10, 0, 32)
+        button.Position = UDim2.new(0, 5, 0, y)
+        button.BackgroundColor3 = selected and Color3.fromRGB(180, 60, 60) or Color3.fromRGB(60, 90, 140)
+        button.TextColor3 = Color3.new(1, 1, 1)
+        button.Font = Enum.Font.Gotham
+        button.TextSize = 13
+        button.Text = item.Name
+        button.Parent = AutoEquipList
+
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 8)
+        corner.Parent = button
+
+        button.MouseButton1Click:Connect(function()
+            AutoEquipSelectedItems[key] = not AutoEquipSelectedItems[key]
+            RefreshAutoEquipList()
+        end)
+
+        y = y + 36
+    end
+
+    AutoEquipList.CanvasSize = UDim2.new(0, 0, 0, y)
+end
+
+local function CreateAutoEquipUI()
+    if AutoEquipGui and AutoEquipGui.Parent then
+        AutoEquipGui:Destroy()
+        AutoEquipGui = nil
+        AutoEquipList = nil
+        return
+    end
+
+    AutoEquipGui = Instance.new("ScreenGui")
+    AutoEquipGui.Name = "AutoEquipUI"
+    AutoEquipGui.ResetOnSpawn = false
+    AutoEquipGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0, 320, 0, 380)
+    frame.Position = UDim2.new(0.5, -160, 0.5, -190)
+    frame.BackgroundColor3 = Color3.fromRGB(25, 30, 45)
+    frame.Parent = AutoEquipGui
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 12)
+    corner.Parent = frame
+
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, 0, 0, 36)
+    title.BackgroundTransparency = 1
+    title.Text = "Auto Equip"
+    title.TextColor3 = Color3.new(1, 1, 1)
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 16
+    title.Parent = frame
+
+    local closeButton = Instance.new("TextButton")
+    closeButton.Size = UDim2.new(0, 30, 0, 30)
+    closeButton.Position = UDim2.new(1, -35, 0, 3)
+    closeButton.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
+    closeButton.TextColor3 = Color3.new(1, 1, 1)
+    closeButton.Font = Enum.Font.GothamBold
+    closeButton.TextSize = 16
+    closeButton.Text = "X"
+    closeButton.Parent = frame
+    
+    local closeCorner = Instance.new("UICorner")
+    closeCorner.CornerRadius = UDim.new(0, 6)
+    closeCorner.Parent = closeButton
+    
+    closeButton.MouseButton1Click:Connect(function()
+        AutoEquipGui:Destroy()
+        AutoEquipGui = nil
+        AutoEquipList = nil
+    end)
+
+    AutoEquipList = Instance.new("ScrollingFrame")
+    AutoEquipList.Size = UDim2.new(1, -10, 1, -46)
+    AutoEquipList.Position = UDim2.new(0, 5, 0, 40)
+    AutoEquipList.BackgroundTransparency = 1
+    AutoEquipList.BorderSizePixel = 0
+    AutoEquipList.ScrollBarThickness = 6
+    AutoEquipList.Parent = frame
+
+    RefreshAutoEquipList()
+end
+
+local function InsertItemHolding()
+    local remote = ReplicatedStorage:FindFirstChild("Remotes")
+    if remote then remote = remote:FindFirstChild("FuseMachine") end
+    if remote then remote = remote:FindFirstChild("InsertItemHolding") end
+    if not remote then remote = ReplicatedStorage:FindFirstChild("InsertItemHolding") end
+    if remote and remote:IsA("RemoteEvent") then
+        remote:FireServer()
+        return true
+    end
+    return false
+end
+
+local function StopAutoPlaceCycle()
+    AutoPlaceCycleActive = false
+    if AutoPlaceCycleThread then
+        task.cancel(AutoPlaceCycleThread)
+        AutoPlaceCycleThread = nil
+    end
+    SafeSetToggle(Toggles.AutoPlaceCycle, false)
+end
+
+local function StartAutoPlaceCycle()
+    if AutoPlaceCycleActive then 
+        StopAutoPlaceCycle()
+        return
+    end
+    
+    local hasSelected = false
+    for _, selected in pairs(AutoEquipSelectedItems) do
+        if selected then hasSelected = true break end
+    end
+    
+    if not hasSelected then
+        SafeSetToggle(Toggles.AutoPlaceCycle, false)
+        return
+    end
+    
+    AutoPlaceCycleActive = true
+    AutoPlaceItemsPlaced = 0
+    
+    AutoPlaceCycleThread = task.spawn(function()
+        while AutoPlaceCycleActive do
+            local placedThisCycle = 0
+            local usedItems = {}
+            
+            while placedThisCycle < 4 and AutoPlaceCycleActive do
+                local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+                if not backpack then break end
+
+                local found = false
+                for _, item in ipairs(backpack:GetChildren()) do
+                    if item:IsA("Tool") then
+                        local itemKey = item:GetDebugId()
+                        if AutoEquipSelectedItems[itemKey] and not usedItems[itemKey] then
+                            if Humanoid then
+                                Humanoid:EquipTool(item)
+                                task.wait(0.2)
+                            end
+                            InsertItemHolding()
+                            placedThisCycle = placedThisCycle + 1
+                            AutoPlaceItemsPlaced = AutoPlaceItemsPlaced + 1
+                            usedItems[itemKey] = true
+                            task.wait(0.4)
+                            found = true
+                            break
+                        end
+                    end
+                end
+
+                if not found then
+                    break
+                end
+            end
+            
+            if placedThisCycle < 4 then
+                StopAutoPlaceCycle()
+                break
+            end
+            
+            if AutoRevealActive then
+                local startTime = tick()
+                while AutoPlaceCycleActive and tick() - startTime < 5100 do
+                    task.wait(1)
+                    if not AutoRevealActive then
+                        StopAutoPlaceCycle()
+                        break
+                    end
+                end
+                
+                if AutoPlaceCycleActive and AutoRevealActive then
+                    RevealFuse()
+                    task.wait(60)
+                end
+            else
+                StopAutoPlaceCycle()
+                break
+            end
+        end
+        StopAutoPlaceCycle()
+    end)
+end
+
+local function SetAutoPlaceCycle(state)
+    if AutoPlaceCycleActive == state then return end
+    if state then StartAutoPlaceCycle() else StopAutoPlaceCycle() end
+end
+
+local function SaveConfig(name)
+    local configData = {
+        FlyEnabled = FlyEnabled,
+        NoHoldEnabled = NoHoldEnabled,
+        HighlightEnabled = HighlightEnabled,
+        InfiniteJumpEnabled = InfiniteJumpEnabled,
+        TpToMouseEnabled = TpToMouseEnabled,
+        AutoClickActive = AutoClickActive,
+        GravityValue = GravityValue,
+        JumpPowerValue = JumpPowerValue,
+        WalkSpeedValue = WalkSpeedValue,
+        RagdollZoneRadius = RagdollZoneRadius,
+        AutoCollectLoopEnabled = AutoCollectLoopEnabled,
+        AutoCollectSecondsDelay = AutoCollectSecondsDelay,
+        AutoCollectMinutesDelay = AutoCollectMinutesDelay,
+        ServerHopConfig = ServerHopConfig
+    }
+    
+    pcall(function()
+        writefile(HUB_FOLDER .. "/" .. name .. ".json", HttpService:JSONEncode(configData))
+    end)
+    notify("Config", "Saved: " .. name, 2)
+end
+
+local function LoadConfig(name)
+    local success, data = pcall(function()
+        return HttpService:JSONDecode(readfile(HUB_FOLDER .. "/" .. name .. ".json"))
+    end)
+    
+    if success and data then
+        if data.FlyEnabled ~= nil then SetFly(data.FlyEnabled) end
+        if data.NoHoldEnabled ~= nil then SetNoHold(data.NoHoldEnabled) end
+        if data.HighlightEnabled ~= nil then SetHighlight(data.HighlightEnabled) end
+        if data.InfiniteJumpEnabled ~= nil then SetInfiniteJump(data.InfiniteJumpEnabled) end
+        if data.TpToMouseEnabled ~= nil then SetTpToMouse(data.TpToMouseEnabled) end
+        if data.AutoClickActive ~= nil then SetAutoClick(data.AutoClickActive) end
+        if data.GravityValue then SetGravity(data.GravityValue) end
+        if data.JumpPowerValue then SetJumpPower(data.JumpPowerValue) end
+        if data.WalkSpeedValue then SetWalkSpeed(data.WalkSpeedValue) end
+        if data.RagdollZoneRadius then SetRagdollZoneRadius(data.RagdollZoneRadius) end
+        if data.AutoCollectLoopEnabled ~= nil then AutoCollectLoopEnabled = data.AutoCollectLoopEnabled end
+        if data.AutoCollectSecondsDelay then AutoCollectSecondsDelay = data.AutoCollectSecondsDelay end
+        if data.AutoCollectMinutesDelay then AutoCollectMinutesDelay = data.AutoCollectMinutesDelay end
+        
+        if data.ServerHopConfig then
+            for k, v in pairs(data.ServerHopConfig) do
+                ServerHopConfig[k] = v
+            end
+        end
+        
+        notify("Config", "Loaded: " .. name, 2)
+        return true
+    end
+    
+    return false
+end
+
+local function DeleteConfig(name)
+    pcall(function() delfile(HUB_FOLDER .. "/" .. name .. ".json") end)
+    notify("Config", "Deleted: " .. name, 2)
+end
+
+local function ListConfigs()
+    local list = {}
+    local success, files = pcall(function() return listfiles(HUB_FOLDER) end)
+    
+    if success and files then
+        for _, file in ipairs(files) do
+            local name = file:match("([^/]+)%.json$")
+            if name and name ~= DEFAULT_CONFIG_FILE then
+                table.insert(list, name)
+            end
+        end
+    end
+    
+    table.insert(list, 1, DEFAULT_CONFIG_FILE)
+    return list
+end
+
+local function SetAutoLoadConfig()
+    safeWriteFile(AUTOLOAD_FILE, currentConfigName)
+    notify("Config", "Auto load set to: " .. currentConfigName, 2)
+end
+
+local function SetupAntiAFK()
+    local hasVirtualUser = pcall(function() return VirtualUser.CaptureController end)
+    LocalPlayer.Idled:Connect(function()
+        if hasVirtualUser then
+            pcall(function()
+                VirtualUser:CaptureController()
+                VirtualUser:ClickButton2(Vector2.new())
+            end)
+        end
+    end)
+end
+
+local UiPlayersLabel, UiStonesLabel, UiPingLabel, UiFpsLabel
+
+local function GetStoneCount()
+    local count = 0
+    for _, stoneName in ipairs(StonePriority) do
+        count = count + #FindStoneByName(stoneName)
+    end
+    return count
+end
+
+local function GetServerPing()
+    local ok, value = pcall(function()
+        return Stats.Network.ServerStatsItem["Data Ping"]:GetValue()
+    end)
+    return ok and value and math.floor(value) or 0
+end
+
+local function UpdateMiniGUI()
+    if UiPlayersLabel then UiPlayersLabel.Text = "Players: " .. #Players:GetPlayers() end
+    if UiStonesLabel then UiStonesLabel.Text = "Stones: " .. GetStoneCount() end
+    if UiPingLabel then UiPingLabel.Text = "Ping: " .. GetServerPing() .. "ms" end
+end
+
+local function CreateMiniGUI()
+    local MiniGuiScreenGui = Instance.new("ScreenGui")
+    MiniGuiScreenGui.Name = "StoneHunterMiniGUI"
+    MiniGuiScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+    MiniGuiScreenGui.ResetOnSpawn = false
+
+    local MiniGuiFrame = Instance.new("Frame")
+    MiniGuiFrame.Size = UDim2.new(0, 180, 0, 110)
+    MiniGuiFrame.Position = UDim2.new(1, -190, 0, 10)
+    MiniGuiFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    MiniGuiFrame.BackgroundTransparency = 0.4
+    MiniGuiFrame.BorderSizePixel = 0
+    MiniGuiFrame.Parent = MiniGuiScreenGui
+
+    local dragging = false
+    local dragStart = nil
+    local startPos = nil
+
+    MiniGuiFrame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = MiniGuiFrame.Position
+        end
+    end)
+
+    MiniGuiFrame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement and dragging then
+            local delta = input.Position - dragStart
+            MiniGuiFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+
+    UiPlayersLabel = Instance.new("TextLabel")
+    UiPlayersLabel.Size = UDim2.new(1, 0, 0, 22)
+    UiPlayersLabel.BackgroundTransparency = 1
+    UiPlayersLabel.Text = "Players: --"
+    UiPlayersLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    UiPlayersLabel.Font = Enum.Font.Gotham
+    UiPlayersLabel.TextSize = 11
+    UiPlayersLabel.Parent = MiniGuiFrame
+
+    UiStonesLabel = Instance.new("TextLabel")
+    UiStonesLabel.Size = UDim2.new(1, 0, 0, 22)
+    UiStonesLabel.Position = UDim2.new(0, 0, 0, 22)
+    UiStonesLabel.BackgroundTransparency = 1
+    UiStonesLabel.Text = "Stones: --"
+    UiStonesLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    UiStonesLabel.Font = Enum.Font.Gotham
+    UiStonesLabel.TextSize = 11
+    UiStonesLabel.Parent = MiniGuiFrame
+
+    UiPingLabel = Instance.new("TextLabel")
+    UiPingLabel.Size = UDim2.new(1, 0, 0, 22)
+    UiPingLabel.Position = UDim2.new(0, 0, 0, 44)
+    UiPingLabel.BackgroundTransparency = 1
+    UiPingLabel.Text = "Ping: --ms"
+    UiPingLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    UiPingLabel.Font = Enum.Font.Gotham
+    UiPingLabel.TextSize = 11
+    UiPingLabel.Parent = MiniGuiFrame
+
+    UiFpsLabel = Instance.new("TextLabel")
+    UiFpsLabel.Size = UDim2.new(1, 0, 0, 22)
+    UiFpsLabel.Position = UDim2.new(0, 0, 0, 66)
+    UiFpsLabel.BackgroundTransparency = 1
+    UiFpsLabel.Text = "FPS: --"
+    UiFpsLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    UiFpsLabel.Font = Enum.Font.Gotham
+    UiFpsLabel.TextSize = 11
+    UiFpsLabel.Parent = MiniGuiFrame
+end
+
+local StoneLabel = Tabs.Main:CreateLabel("Stone: none")
+
+Tabs.Main:CreateSection("Movement")
+
+Toggles.Fly = Tabs.Main:CreateToggle({
+    Name = "Fly",
+    CurrentValue = false,
+    Flag = "Fly",
+    Callback = function(Value) if not InternalToggleUpdate then SetFly(Value) end end
+})
+
+Toggles.NoHold = Tabs.Main:CreateToggle({
+    Name = "Instant Prompt",
+    CurrentValue = false,
+    Flag = "NoHold",
+    Callback = function(Value) if not InternalToggleUpdate then SetNoHold(Value) end end
+})
+
+Toggles.Highlight = Tabs.Main:CreateToggle({
+    Name = "Highlight",
+    CurrentValue = true,
+    Flag = "Highlight",
+    Callback = function(Value) if not InternalToggleUpdate then SetHighlight(Value) end end
+})
+
+Toggles.InfiniteJump = Tabs.Main:CreateToggle({
+    Name = "Infinite Jump",
+    CurrentValue = false,
+    Flag = "InfiniteJump",
+    Callback = function(Value) if not InternalToggleUpdate then SetInfiniteJump(Value) end end
+})
+
+Tabs.Main:CreateSection("Combat")
+
+Toggles.TpToMouse = Tabs.Main:CreateToggle({
+    Name = "TP to Mouse",
+    CurrentValue = false,
+    Flag = "TpToMouse",
+    Callback = function(Value) if not InternalToggleUpdate then SetTpToMouse(Value) end end
+})
+
+Toggles.AutoClick = Tabs.Main:CreateToggle({
+    Name = "Auto Click E",
+    CurrentValue = false,
+    Flag = "AutoClick",
+    Callback = function(Value) if not InternalToggleUpdate then SetAutoClick(Value) end end
+})
+
+Tabs.Teleport:CreateSection("Teleport Slots")
+
+Tabs.Teleport:CreateParagraph({Title = "Save up to 3 positions", Content = ""})
+
+Tabs.Teleport:CreateButton({
+    Name = "Set TP1",
+    Callback = function() if RootPart then TeleportSpots[1] = RootPart.CFrame end end
+})
+
+Tabs.Teleport:CreateButton({
+    Name = "TP to TP1",
+    Callback = function() if TeleportSpots[1] then TeleportToPosition(TeleportSpots[1]) end end
+})
+
+Tabs.Teleport:CreateButton({
+    Name = "Set TP2",
+    Callback = function() if RootPart then TeleportSpots[2] = RootPart.CFrame end end
+})
+
+Tabs.Teleport:CreateButton({
+    Name = "TP to TP2",
+    Callback = function() if TeleportSpots[2] then TeleportToPosition(TeleportSpots[2]) end end
+})
+
+Tabs.Teleport:CreateButton({
+    Name = "Set TP3",
+    Callback = function() if RootPart then TeleportSpots[3] = RootPart.CFrame end end
+})
+
+Tabs.Teleport:CreateButton({
+    Name = "TP to TP3",
+    Callback = function() if TeleportSpots[3] then TeleportToPosition(TeleportSpots[3]) end end
+})
+
+Tabs.Teleport:CreateButton({
+    Name = "TP to Stone",
+    Callback = function() TpToBestStone() end
+})
+
+Tabs.Player:CreateSection("Character Stats")
+
+Tabs.Player:CreateSlider({
+    Name = "Gravity",
+    Range = {0, 500},
+    Increment = 1,
+    CurrentValue = GravityValue,
+    Flag = "Gravity",
+    Callback = function(v) SetGravity(v) end
+})
+
+Tabs.Player:CreateSlider({
+    Name = "Jump Power",
+    Range = {0, 100},
+    Increment = 1,
+    CurrentValue = JumpPowerValue,
+    Flag = "JumpPower",
+    Callback = function(v) SetJumpPower(v) end
+})
+
+Tabs.Player:CreateSlider({
+    Name = "Walk Speed",
+    Range = {0, 100},
+    Increment = 1,
+    CurrentValue = WalkSpeedValue,
+    Flag = "WalkSpeed",
+    Callback = function(v) SetWalkSpeed(v) end
+})
+
+Tabs.Player:CreateSection("Player Interaction")
+
+Tabs.Player:CreateButton({
+    Name = "Select Player",
+    Callback = function() StartPlayerSelectionMode() end
+})
+
+Tabs.Player:CreateButton({
+    Name = "Follow / Stop Following",
+    Callback = function() ToggleFollow() end
+})
+
+Tabs.Ragdoll:CreateSection("Ragdoll Controls")
+
+Toggles.Ragdoll = Tabs.Ragdoll:CreateToggle({
+    Name = "Ragdoll",
+    CurrentValue = false,
+    Flag = "Ragdoll",
+    Callback = function(Value) if not InternalToggleUpdate then if Value then IniciarRagdoll() else PararRagdoll() end end end
+})
+
+Toggles.RagdollZone = Tabs.Ragdoll:CreateToggle({
+    Name = "Ragdoll Zone",
+    CurrentValue = false,
+    Flag = "RagdollZone",
+    Callback = function(Value) if not InternalToggleUpdate then SetRagdollZoneState(Value) end end
+})
+
+Tabs.Ragdoll:CreateSlider({
+    Name = "Zone Radius",
+    Range = {10, 100},
+    Increment = 1,
+    CurrentValue = RagdollZoneRadius,
+    Flag = "ZoneRadius",
+    Callback = function(v) SetRagdollZoneRadius(v) end
+})
+
+Tabs.Ragdoll:CreateSection("Player Selection")
+
+local options = {}
+for _, p in pairs(Players:GetPlayers()) do
+    if p ~= LocalPlayer then
+        local isMarked = MarkedPlayers[p.Name] ~= false
+        table.insert(options, p.Name .. (isMarked and " ✓" or " ✗"))
+    end
+end
+
+MarkedPlayersDropdown = Tabs.Ragdoll:CreateDropdown({
+    Name = "Mark Players (Ragdoll Target)",
+    Options = options,
+    CurrentOption = {},
+    MultipleOptions = true,
+    Flag = "MarkedPlayers",
+    Callback = function(Options)
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer then
+                local isMarked = false
+                for _, opt in ipairs(Options) do
+                    if opt:gsub(" [✓✗]$", "") == player.Name then
+                        isMarked = true
+                        break
+                    end
+                end
+                MarkedPlayers[player.Name] = isMarked
+                if RagdollRodando then
+                    if isMarked then
+                        AdicionarPrioridadeRagdoll(player)
+                    else
+                        for i, p in pairs(RagdollFila) do
+                            if p == player then
+                                table.remove(RagdollFila, i)
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        UpdateMarkedPlayersDropdown()
+    end
+})
+
+Tabs.Machine:CreateSection("Trait Machine")
+
+Tabs.Machine:CreateButton({
+    Name = "Place Brainrot",
+    Callback = function() PlaceBrainrot() end
+})
+
+Toggles.AutoRandomTrait = Tabs.Machine:CreateToggle({
+    Name = "Auto Random Trait",
+    CurrentValue = false,
+    Flag = "AutoRandomTrait",
+    Callback = function(Value) if not InternalToggleUpdate then SetAutoRandomTrait(Value) end end
+})
+
+Tabs.Machine:CreateButton({
+    Name = "Pickup Brainrot",
+    Callback = function() PickupBrainrot() end
+})
+
+Tabs.Machine:CreateSection("Fuse Machine")
+
+Toggles.AutoReveal = Tabs.Machine:CreateToggle({
+    Name = "Auto Reveal",
+    CurrentValue = false,
+    Flag = "AutoReveal",
+    Callback = function(Value) if not InternalToggleUpdate then SetAutoRevealFuse(Value) end end
+})
+
+Toggles.AutoStartFuse = Tabs.Machine:CreateToggle({
+    Name = "Auto Start Fuse",
+    CurrentValue = false,
+    Flag = "AutoStartFuse",
+    Callback = function(Value) if not InternalToggleUpdate then SetAutoStartFuse(Value) end end
+})
+
+Tabs.Machine:CreateButton({
+    Name = "Auto Equip",
+    Callback = function() CreateAutoEquipUI() end
+})
+
+Toggles.AutoPlaceCycle = Tabs.Machine:CreateToggle({
+    Name = "Auto Place Cycle",
+    CurrentValue = false,
+    Flag = "AutoPlaceCycle",
+    Callback = function(Value) if not InternalToggleUpdate then SetAutoPlaceCycle(Value) end end
+})
+
+Tabs.Base:CreateSection("Auto Farming")
+
+Toggles.AutoRebirth = Tabs.Base:CreateToggle({
+    Name = "Auto Rebirth",
+    CurrentValue = false,
+    Flag = "AutoRebirth",
+    Callback = function(Value) if not InternalToggleUpdate then SetAutoRebirth(Value) end end
+})
+
+Toggles.AutoUpgrade = Tabs.Base:CreateToggle({
+    Name = "Auto Upgrade Plot",
+    CurrentValue = false,
+    Flag = "AutoUpgrade",
+    Callback = function(Value) if not InternalToggleUpdate then SetAutoUpgradePlot(Value) end end
+})
+
+Tabs.Base:CreateSection("Auto Collect")
+
+Toggles.AutoCollect = Tabs.Base:CreateToggle({
+    Name = "Auto Collect Money",
+    CurrentValue = false,
+    Flag = "AutoCollect",
+    Callback = function(Value) if not InternalToggleUpdate then SetAutoCollectMoney(Value) end end
+})
+
+Tabs.Base:CreateToggle({
+    Name = "Auto Collect Looping",
+    CurrentValue = false,
+    Flag = "AutoCollectLoop",
+    Callback = function(Value) AutoCollectLoopEnabled = Value end
+})
+
+Tabs.Base:CreateSlider({
+    Name = "Auto Collect Seconds",
+    Range = {0, 59},
+    Increment = 1,
+    CurrentValue = 0,
+    Flag = "AutoCollectSec",
+    Callback = function(Value) AutoCollectSecondsDelay = Value end
+})
+
+Tabs.Base:CreateSlider({
+    Name = "Auto Collect Minutes",
+    Range = {0, 60},
+    Increment = 1,
+    CurrentValue = 0,
+    Flag = "AutoCollectMin",
+    Callback = function(Value) AutoCollectMinutesDelay = Value end
+})
+
+Tabs.Settings:CreateSection("Server Hop Configuration")
+
+Tabs.Settings:CreateToggle({
+    Name = "Ignore Current Server",
+    CurrentValue = ServerHopConfig.IgnoreCurrentServer,
+    Flag = "IgnoreCurrentServer",
+    Callback = function(Value) ServerHopConfig.IgnoreCurrentServer = Value end
+})
+
+Tabs.Settings:CreateToggle({
+    Name = "Ignore Full Servers",
+    CurrentValue = ServerHopConfig.IgnoreFullServers,
+    Flag = "IgnoreFullServers",
+    Callback = function(Value) ServerHopConfig.IgnoreFullServers = Value end
+})
+
+Tabs.Settings:CreateToggle({
+    Name = "Ignore Visited Servers",
+    CurrentValue = ServerHopConfig.IgnoreVisitedServers,
+    Flag = "IgnoreVisitedServers",
+    Callback = function(Value) ServerHopConfig.IgnoreVisitedServers = Value end
+})
+
+Tabs.Settings:CreateDropdown({
+    Name = "Sort Mode",
+    Options = {"LowestPlayers", "HighestPlayers"},
+    CurrentOption = {ServerHopConfig.SortMode},
+    Flag = "SortMode",
+    Callback = function(Option)
+        ServerHopConfig.SortMode = Option[1]
+    end
+})
+
+Tabs.Settings:CreateToggle({
+    Name = "Retry on Teleport Fail",
+    CurrentValue = ServerHopConfig.RetryTeleportFail,
+    Flag = "RetryTeleportFail",
+    Callback = function(Value) ServerHopConfig.RetryTeleportFail = Value end
+})
+
+Tabs.Settings:CreateSlider({
+    Name = "Max Teleport Attempts",
+    Range = {1, 10},
+    Increment = 1,
+    CurrentValue = ServerHopConfig.MaxTeleportAttempts,
+    Flag = "MaxTeleportAttempts",
+    Callback = function(Value) ServerHopConfig.MaxTeleportAttempts = Value end
+})
+
+Tabs.Settings:CreateToggle({
+    Name = "Hop Only If No Stone",
+    CurrentValue = ServerHopConfig.HopOnlyIfNoStone,
+    Flag = "HopOnlyIfNoStone",
+    Callback = function(Value) ServerHopConfig.HopOnlyIfNoStone = Value end
+})
+
+Tabs.Settings:CreateDropdown({
+    Name = "Target Stone",
+    Options = {"DivineStone", "CelestialStone"},
+    CurrentOption = {ServerHopConfig.TargetStone},
+    Flag = "TargetStone",
+    Callback = function(Option)
+        ServerHopConfig.TargetStone = Option[1]
+    end
+})
+
+Tabs.Settings:CreateButton({
+    Name = "Single Server Hop",
+    Callback = function() SingleServerHop() end
+})
+
+Tabs.Settings:CreateButton({
+    Name = "Clear Visited Servers",
+    Callback = function() VisitedServers = {} end
+})
+
+Toggles.AutoHop = Tabs.Settings:CreateToggle({
+    Name = "Auto Hop (Find Stone)",
+    CurrentValue = false,
+    Flag = "AutoHop",
+    Callback = function(Value) if not InternalToggleUpdate then SetAutoHop(Value) end end
+})
+
+Tabs.Settings:CreateButton({
+    Name = "Rejoin Current Server",
+    Callback = function() RejoinCurrentServer() end
+})
+
+Tabs.Settings:CreateSection("Configurations")
+
+Tabs.Settings:CreateInput({
+    Name = "Config Name",
+    CurrentValue = currentConfigName,
+    PlaceholderText = "Enter config name",
+    RemoveTextAfterFocusLost = false,
+    Flag = "ConfigName",
+    Callback = function(Value)
+        if Value and Value ~= "" then
+            currentConfigName = Value
+        end
+    end
+})
+
+Tabs.Settings:CreateButton({
+    Name = "Save Config",
+    Callback = function() SaveConfig(currentConfigName) end
+})
+
+Tabs.Settings:CreateButton({
+    Name = "Load Config",
+    Callback = function() LoadConfig(currentConfigName) end
+})
+
+Tabs.Settings:CreateButton({
+    Name = "Delete Config",
+    Callback = function() DeleteConfig(currentConfigName) end
+})
+
+Tabs.Settings:CreateButton({
+    Name = "Set Auto Load Config",
+    Callback = function() SetAutoLoadConfig() end
+})
+
+Tabs.Settings:CreateDropdown({
+    Name = "Load Config From List",
+    Options = ListConfigs(),
+    CurrentOption = {},
+    Flag = "LoadConfigList",
+    Callback = function(Option)
+        if Option and Option[1] then
+            currentConfigName = Option[1]
+            LoadConfig(currentConfigName)
+        end
+    end
+})
+
+Tabs.Settings:CreateSection("UI Theme")
+
+local themes = {"Default", "AmberGlow", "Amethyst", "Bloom", "DarkBlue", "Green", "Light", "Ocean", "Serenity"}
+Tabs.Settings:CreateDropdown({
+    Name = "Theme",
+    Options = themes,
+    CurrentOption = {"DarkBlue"},
+    Flag = "Theme",
+    Callback = function(Option)
+        local newTheme = Option[1]
+        safeWriteFile(HUB_FOLDER .. "/theme.txt", newTheme)
+        loadstring(game:HttpGet(https://raw.githubusercontent.com/viniblume123/StoneHunter-VF-Hub/refs/heads/main/StoneHunter-VF-Hub))()
+    end
+})
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    
+    if input.KeyCode == Enum.KeyCode.W then MoveKeys.W = true end
+    if input.KeyCode == Enum.KeyCode.A then MoveKeys.A = true end
+    if input.KeyCode == Enum.KeyCode.S then MoveKeys.S = true end
+    if input.KeyCode == Enum.KeyCode.D then MoveKeys.D = true end
+    if input.KeyCode == Enum.KeyCode.Space then MoveKeys.Space = true end
+    if input.KeyCode == Enum.KeyCode.LeftShift then MoveKeys.LeftShift = true end
+
+    if input.KeyCode == Enum.KeyCode.Space and InfiniteJumpEnabled and Humanoid then
+        Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+    end
+
+    if input.KeyCode == Keybinds.Fly then
+        SetFly(not FlyEnabled)
+    elseif input.KeyCode == Keybinds.Ragdoll then
+        ToggleRagdoll()
+    elseif input.KeyCode == Keybinds.TpToStone then
+        TpToBestStone()
+    elseif input.KeyCode == Keybinds.ServerHop then
+        SingleServerHop()
+    elseif input.KeyCode == Keybinds.InfiniteJump then
+        SetInfiniteJump(not InfiniteJumpEnabled)
+    elseif input.KeyCode == Keybinds.AutoClick then
+        SetAutoClick(not AutoClickActive)
+    elseif input.KeyCode == Keybinds.TpSaved1 then
+        if TeleportSpots[1] then TeleportToPosition(TeleportSpots[1]) end
+    elseif input.KeyCode == Keybinds.TpSaved2 then
+        if TeleportSpots[2] then TeleportToPosition(TeleportSpots[2]) end
+    elseif input.KeyCode == Keybinds.TpSaved3 then
+        if TeleportSpots[3] then TeleportToPosition(TeleportSpots[3]) end
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.KeyCode == Enum.KeyCode.W then MoveKeys.W = false end
+    if input.KeyCode == Enum.KeyCode.A then MoveKeys.A = false end
+    if input.KeyCode == Enum.KeyCode.S then MoveKeys.S = false end
+    if input.KeyCode == Enum.KeyCode.D then MoveKeys.D = false end
+    if input.KeyCode == Enum.KeyCode.Space then MoveKeys.Space = false end
+    if input.KeyCode == Enum.KeyCode.LeftShift then MoveKeys.LeftShift = false end
+end)
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+    Character = char
+    Humanoid = char:WaitForChild("Humanoid")
+    RootPart = char:WaitForChild("HumanoidRootPart")
+    task.wait(0.5)
+    if Humanoid then
+        Humanoid.WalkSpeed = WalkSpeedValue
+        Humanoid.JumpPower = JumpPowerValue
+        if not Humanoid.UseJumpPower then Humanoid.UseJumpPower = true end
+    end
+    Workspace.Gravity = GravityValue
+end)
+
+Workspace.DescendantAdded:Connect(function(obj)
+    if obj:IsA("ProximityPrompt") and NoHoldEnabled then
+        if PromptOriginalDurations[obj] == nil then
+            PromptOriginalDurations[obj] = obj.HoldDuration
+        end
+        obj.HoldDuration = 0
+    end
+end)
+
+local function MonitorStones()
+    Workspace.DescendantAdded:Connect(function(obj)
+        if obj.Name == "DivineStone" or obj.Name == "CelestialStone" then
+            UpdateStoneHighlights()
+            if StoneLabel then
+                local container, _, stoneName = FindBestStone()
+                if container then
+                    StoneLabel:Set("Stone: " .. stoneName)
+                end
+            end
+        end
+    end)
+
+    Workspace.DescendantRemoving:Connect(function(obj)
+        if obj.Name == "DivineStone" or obj.Name == "CelestialStone" then
+            UpdateStoneHighlights()
+            local container, _, stoneName = FindBestStone()
+            if container then
+                StoneLabel:Set("Stone: " .. stoneName)
+            else
+                StoneLabel:Set("Stone: none")
+            end
+        end
+    end)
+end
+
+SetupAntiAFK()
+CreateMiniGUI()
+UpdateStoneHighlights()
+MonitorStones()
+SetHighlight(true)
+
+task.spawn(function()
+    while true do
+        UpdateMiniGUI()
+        task.wait(1)
+    end
+end)
+
+local FrameCount = 0
+local LastTime = tick()
+RunService.RenderStepped:Connect(function()
+    FrameCount = FrameCount + 1
+    local now = tick()
+    if now - LastTime >= 1 then
+        if UiFpsLabel then UiFpsLabel.Text = "FPS: " .. FrameCount end
+        FrameCount = 0
+        LastTime = now
+    end
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+        if CurrentStoneContainer or CurrentStonePart then
+            if not IsStillValidStone(CurrentStoneContainer, CurrentStonePart) then
+                CurrentStoneContainer = nil
+                CurrentStonePart = nil
+                UpdateStoneHighlights()
+            end
+        end
+    end
+end)
+
+Rayfield:LoadConfiguration()
+
+if autoLoadConfigName and autoLoadConfigName ~= "" then
+    task.wait(1)
+    LoadConfig(autoLoadConfigName)
+end
